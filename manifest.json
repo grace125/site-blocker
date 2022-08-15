@@ -1,0 +1,17 @@
+{
+	"name": "site-blocker",
+	"description": "An extension to block websites",
+	"version": "0.1",
+	"manifest_version": 3,
+	"permissions": [
+		"tabs",
+		"activeTab"
+	],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"content_scripts": [{
+		"matches": ["<all_urls>"],
+		"js": ["content.js"]
+	}]
+}
