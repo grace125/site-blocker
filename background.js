@@ -25,6 +25,8 @@ const rules = [ // Rules are checked in the order they appear
 	}
 ]
 
+var ports = {};
+
 function scheduleCheck(rule) {
 	let date = new Date()
 	let time = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds()
@@ -55,34 +57,50 @@ function urlCheck(rule, url) {
 	return false 
 }
 
+
+function redirectTabUrl(port) {
+	return (msg) => {
+		console.log(msg);
+		if (msg.messageType = "urlCheck") {
+			for (const rule of rules) {
+				if (scheduleCheck(rule) && urlCheck(rule, msg.url)) {
+					port.postMessage({ messageType: "redirectSite", url: rule.redirectUrl });
+					return;
+				}
+			}
+		}
+	}
+}
+
+// Fires when a tab has been put into focus
 chrome.tabs.onActivated.addListener(args => {
 	chrome.tabs.query({active: true, windowId: args.windowId}).then(tabs => {
 		for (const tab of tabs) {
-			for (const rule of rules) {
-				if (scheduleCheck(rule) && urlCheck(rule, tab.url)) {
-					chrome.tabs.sendMessage(tab.id, rule.redirectUrl);
-					return
-				}
-			}
+			let port = chrome.tabs.connect(tab.id)
+			port.postMessage({ messageType: "requestUrlCheck", url: tab.url });
+			ports[tab.id] = port;
+			port.onMessage.addListener(redirectTabUrl(port));
 		}
 	})
 })
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-	for (const rule of rules) {
-		if (scheduleCheck(rule) && urlCheck(rule, sender.url)) {
-			sendResponse(rule.redirectUrl);
-			return
-		}
+// Fires when a tab's url has been updated
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+	if ('url' in changeInfo) {
+		let port = chrome.tabs.connect(tabId);
+		port.postMessage({ messageType: "requestUrlCheck", url: changeInfo.url });
+		ports[tabId] = port;
+		port.onMessage.addListener(redirectTabUrl(port));
 	}
 })
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-	if ('url' in changeInfo) {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+	console.log(msg);
+	if (msg.messageType = "urlCheck") {
 		for (const rule of rules) {
-			if (scheduleCheck(rule) && urlCheck(rule, changeInfo.url)) {
-				chrome.tabs.sendMessage(tabId, rule.redirectUrl);
-				return
+			if (scheduleCheck(rule) && urlCheck(rule, msg.url)) {
+				sendResponse({ messageType: "redirectSite", url: rule.redirectUrl });
+				return;
 			}
 		}
 	}
